@@ -1,5 +1,4 @@
 import React, { Component } from 'react';
-import Clarifai from 'clarifai';
 import Navigation from '../components/Navigation/Navigation';
 import Logo from '../components/Logo/Logo';
 import SignIn from '../components/SignIn/SignIn';
@@ -10,22 +9,42 @@ import ParticlesBg from '../components/Particles/ParticlesBg';
 import FaceRecognition from '../components/FaceRecognition/FaceRecognition';
 import './App.css';
 
-const app = new Clarifai.App({
-  apiKey: '7c0724e244e44b8b8fac3805020db584'
- });
-
+const initialState = {
+  input: '',
+  imageUrl: '',
+  box: {},
+  route: 'signin',
+  isSignedIn: false,
+  user: {
+    id: '',
+    name: '',
+    email: '',
+    entries: 0,
+    joined: ''
+  }
+}
 class App extends Component {
   constructor(){
     super();
-    this.state = {
-      input: '',
-      imageUrl: '',
-      box: {},
-      route: 'signin',
-      isSignedIn: false
+    this.state = initialState;
     }
-  }
+  
 
+  // componentDidMount(){
+  //   fetch('http://localhost:3000')
+  //   .then(response => response.json())
+  //   .then(data => console.log(data));  // == .then(console.log);
+  // }
+
+  loadUser = (info) => {
+    this.setState({user: {
+      id: info.id,
+      name: info.name,
+      email: info.email,
+      entries: info.entries,
+      joined: info.joined
+    }})
+  }
   calculateFaceLocation = (data) => {
     const clarifaiFace = data.outputs[0].data.regions[0].region_info.bounding_box
     const image = document.getElementById('inputImage');
@@ -39,7 +58,6 @@ class App extends Component {
     }
   };
   displayFaceBox = (box) => {
-    console.log(box)
     this.setState({box: box});
   }
 
@@ -47,23 +65,47 @@ class App extends Component {
     this.setState({input: event.target.value})
   }
 
-  onInputSubmit = () =>{
+  onImageSubmit = () => {
     this.setState({imageUrl: this.state.input});
-    app.models.predict(
-      Clarifai.FACE_DETECT_MODEL,
-      this.state.input)
-      .then(response => this.displayFaceBox(this.calculateFaceLocation(response)))
-      .catch(err => console.log(err));
+      fetch('http://localhost:3000/imageurl',{
+        method: 'post',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          input: this.state.input
+        })
+      })
+      .then(response => response.json())
+      .then(response => {
+        if(response){
+          fetch('http://localhost:3000/image',{
+            method: 'put',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                id: this.state.user.id
+            })
+          })
+          .then(response => response.json())
+          .then(count => {
+            // this.setState({user: {
+            //   entries: count
+            // }})
+            this.setState(Object.assign(this.state.user,{ // updating user object
+              entries: count
+            }))
+          })
+        }
+        this.displayFaceBox(this.calculateFaceLocation(response))
+      })
+      .catch(err => console.log(err))
   }
   
   onRouteChange = (route) => {
     if(route === 'signin' || route === 'register'){
-      this.setState({isSignedIn: false})      
+      this.setState(initialState)      
     }else if(route === 'home'){
       this.setState({isSignedIn: true})      
     }
     this.setState({route})
-    
   }
   render() {
     const { isSignedIn, imageUrl, route, box } = this.state;
@@ -74,10 +116,13 @@ class App extends Component {
         { route === 'home'
         ?<div>
           <Logo />
-          <Rank />
+          <Rank 
+            name={this.state.user.name}
+            entries={this.state.user.entries}
+          />
           <ImgLinkForm 
             onInputChange ={this.onInputChange}
-            onInputSubmit = {this.onInputSubmit}
+            onImageSubmit = {this.onImageSubmit}
           />
           <FaceRecognition
             box={box}
@@ -85,8 +130,14 @@ class App extends Component {
           />
         </div>
         :( route === 'signin'
-          ?<SignIn onRouteChange = {this.onRouteChange}/>
-          :<Register onRouteChange = {this.onRouteChange}/>
+          ?<SignIn 
+            loadUser = {this.loadUser}
+            onRouteChange = {this.onRouteChange}
+          />
+          :<Register 
+            loadUser = {this.loadUser} 
+            onRouteChange = {this.onRouteChange}
+          />
         )
         }
       </div>
